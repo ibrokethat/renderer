@@ -1,0 +1,36 @@
+{
+  "name": "renderer",
+  "description": "mvc renderer",
+  "version": "0.0.1",
+  "author": "si@ibrokethat.com",
+  "contributors": [
+    { "name": "Simon Jefford", "email": "si@ibrokethat.com" }
+  ],
+  "dependencies": {
+    "Base"       : "git+ssh://git@github.com:ibrokethat/Base",
+    "func"       : "git+ssh://git@github.com:ibrokethat/func",
+    "is"         : "git+ssh://git@github.com:ibrokethat/is",
+    "iter"       : "git+ssh://git@github.com:ibrokethat/iter",
+    "Object"     : "git+ssh://git@github.com:ibrokethat/Object",
+    "system"     : "git+ssh://git@github.com:ibrokethat/system",
+    "uuid"       : "git+ssh://git@github.com:ibrokethat/uuid"
+  },
+  "devDependencies": {
+    "mocha": "1.2.x",
+    "sinon": "1.3.x"
+  },
+  "keywords": ["ibrokethat", "renderer"],
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:ibrokethat/renderer"
+  },
+  "ibrokethat": {
+    "buildClient": true
+  },
+  "main": "renderer.js",
+  "scripts": {
+    "prepublish" : "npm prune",
+    "test": "mocha -u bdd"
+  },
+  "engines": { "node": "*" }
+}
