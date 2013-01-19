@@ -58,17 +58,29 @@ function stylePercent (node, prop, key, data) {
 }
 
 
-var controllers = {};
+
+var observers = {};
+function generateObserverId (node, type) {
+
+  var attr = "data-" + type + "Id";
+
+  if (!node.hasAttribute(attr)) {
+    node.setAttribute(attr, generateUuid());
+  }
+  var id = node.getAttribute(attr);
+  if (!observers.hasOwnProperty(id)) {
+    observers[id] = [];
+  }
+
+  return id;
+
+}
+
 function cacheControllers (node, event, func) {
 
-  if (!node.hasAttribute("data-controllerId")) {
-    node.setAttribute("data-controllerId", generateUuid());
-  }
-  var id = node.getAttribute("data-controllerId");
-  if (!controllers.hasOwnProperty(id)) {
-    controllers[id] = [];
-  }
-  controllers[id].push({
+  var id = generateObserverId(node, "controller");
+
+  observers[id].push({
     node: node,
     event: event,
     func: func
@@ -76,16 +88,10 @@ function cacheControllers (node, event, func) {
 }
 
 
-var observers = {};
 function cacheObservers (node, model, key, func) {
 
-  if (!node.hasAttribute("data-observerId")) {
-    node.setAttribute("data-observerId", generateUuid());
-  }
-  var id = node.getAttribute("data-observerId");
-  if (!observers.hasOwnProperty(id)) {
-    observers[id] = [];
-  }
+  var id = generateObserverId(node, "observer");
+
   observers[id].push({
     model: model,
     key: key,
@@ -106,33 +112,36 @@ function bindProperty (model, key, update) {
 }
 
 
-function clean (previous) {
+function removeObserver (data) {
+  data.model.removeListener(data.key, data.func);
+}
 
-  forEach(nodesByAttribute(previous, "data-observerId"), function(node) {
+function removeController (data) {
+  data.node.removeEventListener(data.event, data.func, false);
+}
 
-    var id = node.getAttribute("data-observerId");
-    forEach(observers[id], function (data) {
-      data.model.removeListener(data.key, data.func);
-    });
+function removeObservers (type, func, node) {
+
+  var attr = "data-" + type + "Id";
+
+  forEach(nodesByAttribute(node, attr), function(node) {
+
+    var id = node.getAttribute(attr);
+    forEach(observers[id], func);
     observers[id] = null;
     delete observers[id];
 
   });
 
-  forEach(nodesByAttribute(previous, "data-controllerId"), function(node) {
-
-    var id = node.getAttribute("data-controllerId");
-    forEach(controllers[id], function (data) {
-      data.node.removeEventListener(data.event, data.func, false);
-    });
-    controllers[id] = null;
-    delete controllers[id];
-
-  });
-
-  previous = null;
+  return node;
 
 }
+
+var clean = compose(
+  partial(removeObservers, "observer", removeObserver),
+  partial(removeObservers, "controller", removeController)
+);
+
 
 
 function render (data) {
@@ -203,9 +212,7 @@ function bindController (data) {
       var event = eventMap(bindings[0]);
       var action = bindings[1];
 
-      var listener = bindListener(data.view, event, action, controller);
-
-      cacheControllers(data.view, event, listener);
+      cacheControllers(data.view, event, bindListener(data.view, event, action, controller));
 
     });
 
@@ -229,7 +236,7 @@ function getController (data) {
 
 function nodesByAttribute (view, attr) {
 
-  var nodes = view.querySelectorAll("[" + attr + "]")
+  var nodes = view.querySelectorAll("[" + attr + "]");
   var root;
 
   if (view.hasAttribute(attr)) {
@@ -249,11 +256,14 @@ function observeModel (data) {
 
   forEach(nodesByAttribute(data.view, "data-attr"), function (node) {
 
-    var key = node.getAttribute("data-attr");
-    var update = partial(attr, node, key);
+    forEach(node.getAttribute("data-attr").split(","), function (key) {
 
-    bindProperty(data.model, key, update);
-    cacheObservers(node, data.model, key, update);
+      var update = partial(attr, node, key);
+
+      bindProperty(data.model, key, update);
+      cacheObservers(node, data.model, key, update);
+
+    });
 
   });
 
@@ -269,10 +279,10 @@ function observeModel (data) {
 
   forEach(nodesByAttribute(data.view, "data-style"), function (node) {
 
-    var data = node.getAttribute("data-style").split(":");
-    var key = data[0];
-    var prop = data[1];
-    var unit = data[2] || "";
+    var attr = node.getAttribute("data-style").split(":");
+    var key = attr[0];
+    var prop = attr[1];
+    var unit = attr[2] || "";
     var update = partial(style, node, prop, unit);
 
     bindProperty(data.model, key, update);
@@ -282,9 +292,9 @@ function observeModel (data) {
 
   forEach(nodesByAttribute(data.view, "data-stylePercent"), function (node) {
 
-    var data = node.getAttribute("data-stylePercent").split(":");
-    var key = data[0];
-    var prop = data[1];
+    var attr = node.getAttribute("data-stylePercent").split(":");
+    var key = attr[0];
+    var prop = attr[1];
     var update = partial(stylePercent, node, prop, key);
 
     bindProperty(data.model, key, update);
@@ -380,3 +390,7 @@ var renderView = compose(
   // renderHasOne,
 
 exports.renderView = renderView;
+exports.clean = compose(
+  clean,
+  getPrevious
+);
