@@ -251,6 +251,14 @@ function nodesByAttribute (view, attr) {
 }
 
 
+function observeSystem (data) {
+
+
+
+  return data;
+}
+
+
 
 function observeModel (data) {
 
@@ -302,6 +310,19 @@ function observeModel (data) {
 
   });
 
+  forEach(nodesByAttribute(data.view, "data-on"), function (node) {
+
+    var event = node.getAttribute("data-on");
+    var view = loadView(node);
+    var update = partial(renderViewOnEvent, node, view);
+
+    system.on(event, update);
+
+    // bindProperty(data.model, key, update);
+    // cacheObservers(node, data.model, key, update);
+
+  });
+
   return data;
 
 }
@@ -324,6 +345,10 @@ function enforceModel (data) {
 
 }
 
+
+function loadView (node) {
+  return require("./views/" + node.getAttribute("data-view") + ".html", "/");
+}
 
 function getView (data) {
 
@@ -350,6 +375,18 @@ function getPrevious (node) {
 }
 
 
+function renderViewOnEvent (node, view, data) {
+
+  var previous = getPrevious(node);
+  renderView({
+    root: node,
+    view: view,
+    model: data.model
+  });
+  clean(previous);
+
+}
+
 function updateCollection (node, data) {
 
 
@@ -362,7 +399,7 @@ function updateCollection (node, data) {
 
 function renderCollection (node, collection) {
 
-  var view = require("./views/" + node.getAttribute("data-view") + ".html", "/");
+  var view = loadView(node);
   var fragment = document.createDocumentFragment();
 
   forEach(collection.items, function (item) {
@@ -382,6 +419,7 @@ var renderView = compose(
   renderHasMany,
   bindController,
   getController,
+  observeSystem,
   observeModel,
   enforceModel,
   getView
