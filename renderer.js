@@ -16,6 +16,7 @@ var func         = require("func");
 var uuid         = require("uuid");
 var system       = require("system");
 var enforce      = is.enforce;
+var typeOf       = is.typeOf;
 var forEach      = iter.forEach;
 var map          = iter.map;
 var chain        = iter.chain;
@@ -23,13 +24,14 @@ var partial      = func.partial;
 var identity     = func.identity;
 var compose      = func.compose;
 var generateUuid = uuid.generate;
+var some         = iter.some;
 
 var eventMap = identity;
 
 
 function attr (node, key, data) {
 
-  node.setAttribute("data-" + key, data.value);
+  node.dataset[key] = data.value;
 
 }
 
@@ -60,14 +62,16 @@ function stylePercent (node, prop, key, data) {
 
 
 var observers = {};
+
 function generateObserverId (node, type) {
 
-  var attr = "data-" + type + "Id";
+  var attr = type + "Id";
 
-  if (!node.hasAttribute(attr)) {
-    node.setAttribute(attr, generateUuid());
+  if (!node.dataset[attr]) {
+    node.dataset[attr] = generateUuid();
   }
-  var id = node.getAttribute(attr);
+  var id = node.dataset[attr];
+
   if (!observers.hasOwnProperty(id)) {
     observers[id] = [];
   }
@@ -122,11 +126,11 @@ function removeController (data) {
 
 function removeObservers (type, func, node) {
 
-  var attr = "data-" + type + "Id";
+  var attr = type + "Id";
 
   forEach(nodesByAttribute(node, attr), function(node) {
 
-    var id = node.getAttribute(attr);
+    var id = node.dataset[attr];
     forEach(observers[id], func);
     observers[id] = null;
     delete observers[id];
@@ -155,9 +159,9 @@ function render (data) {
 
 function renderHasMany (data) {
 
-  forEach(nodesByAttribute(data.view, "data-hasMany"), function (node) {
+  forEach(nodesByAttribute(data.view, "hasMany"), function (node) {
 
-    var relation = node.getAttribute("data-hasMany");
+    var relation = node.dataset.hasMany;
     var collection = data.model[relation];
     var update = partial(updateCollection, node);
 
@@ -176,21 +180,20 @@ function renderHasMany (data) {
 }
 
 
-function bindListener (node, event, action, func) {
+function bindListener (node, event, func, action) {
 
-  function listener (e) {
+  var listener = typeOf("undefined", action) ? func : function (e) {
 
     var node = e.target;
     while (node !== e.currentTarget) {
-      if (node.getAttribute("data-action") === action) {
+      if (node.dataset.action === action) {
         e.delegateTarget = node;
-        func.call(node, e);
-        break;
+        return func.call(node, e);
       }
       node = node.parentNode;
     }
 
-  }
+  };
 
   node.addEventListener(event, listener, false);
 
@@ -212,7 +215,7 @@ function bindController (data) {
       var event = eventMap(bindings[0]);
       var action = bindings[1];
 
-      cacheControllers(data.view, event, bindListener(data.view, event, action, controller));
+      cacheControllers(data.view, event, bindListener(data.view, event, controller, action));
 
     });
 
@@ -225,7 +228,7 @@ function bindController (data) {
 
 function getController (data) {
 
-  var controller = data.view.getAttribute("data-controller");
+  var controller = data.view.dataset.controller;
 
   data.controller = controller ? require("./controllers/" + controller, "/") : false;
 
@@ -234,12 +237,22 @@ function getController (data) {
 }
 
 
+function runCustomRenderer (data) {
+
+  var renderer = data.view.dataset.renderer;
+  var render = renderer ? require("./renderers/" + renderer, "/").render : identity;
+
+  return render(data);
+
+}
+
+
 function nodesByAttribute (view, attr) {
 
-  var nodes = view.querySelectorAll("[" + attr + "]");
+  var nodes = view.querySelectorAll("[data-" + attr.replace(/([A-Z])/, "-$1").toLowerCase() + "]");
   var root;
 
-  if (view.hasAttribute(attr)) {
+  if (view.dataset[attr]) {
     root = [view];
   }
 
@@ -251,20 +264,13 @@ function nodesByAttribute (view, attr) {
 }
 
 
-function observeSystem (data) {
-
-
-
-  return data;
-}
-
 
 
 function observeModel (data) {
 
-  forEach(nodesByAttribute(data.view, "data-attr"), function (node) {
+  forEach(nodesByAttribute(data.view, "attr"), function (node) {
 
-    forEach(node.getAttribute("data-attr").split(","), function (key) {
+    forEach(node.dataset.attr.split(","), function (key) {
 
       var update = partial(attr, node, key);
 
@@ -275,9 +281,9 @@ function observeModel (data) {
 
   });
 
-  forEach(nodesByAttribute(data.view, "data-inner"), function (node) {
+  forEach(nodesByAttribute(data.view, "inner"), function (node) {
 
-    var key = node.getAttribute("data-inner");
+    var key = node.dataset.inner;
     var update = partial(inner, node);
 
     bindProperty(data.model, key, update);
@@ -285,9 +291,9 @@ function observeModel (data) {
 
   });
 
-  forEach(nodesByAttribute(data.view, "data-style"), function (node) {
+  forEach(nodesByAttribute(data.view, "style"), function (node) {
 
-    var attr = node.getAttribute("data-style").split(":");
+    var attr = node.dataset.style.split(":");
     var key = attr[0];
     var prop = attr[1];
     var unit = attr[2] || "";
@@ -298,9 +304,9 @@ function observeModel (data) {
 
   });
 
-  forEach(nodesByAttribute(data.view, "data-stylePercent"), function (node) {
+  forEach(nodesByAttribute(data.view, "stylePercent"), function (node) {
 
-    var attr = node.getAttribute("data-stylePercent").split(":");
+    var attr = node.dataset.stylePercent.split(":");
     var key = attr[0];
     var prop = attr[1];
     var update = partial(stylePercent, node, prop, key);
@@ -310,9 +316,9 @@ function observeModel (data) {
 
   });
 
-  forEach(nodesByAttribute(data.view, "data-on"), function (node) {
+  forEach(nodesByAttribute(data.view, "on"), function (node) {
 
-    var event = node.getAttribute("data-on");
+    var event = node.dataset.on;
     var view = loadView(node);
     var update = partial(renderViewOnEvent, node, view);
 
@@ -331,7 +337,7 @@ function observeModel (data) {
 
 function enforceModel (data) {
 
-  var allowedModel = data.view.getAttribute("data-model");
+  var allowedModel = data.view.dataset.model;
   if (allowedModel) {
     try {
       enforce(require("/models/" + allowedModel), data.model);
@@ -347,7 +353,7 @@ function enforceModel (data) {
 
 
 function loadView (node) {
-  return require("./views/" + node.getAttribute("data-view") + ".html", "/");
+  return require("./views/" + node.dataset.view + ".html", "/");
 }
 
 function getView (data) {
@@ -362,17 +368,38 @@ function getView (data) {
 }
 
 
-function getPrevious (node) {
+function getPrevious (root, collection) {
 
-  previous = document.createElement("div");
+  var previous = document.createElement("div");
 
-  while (node.firstChild) {
-    previous.appendChild(node.firstChild);
+  if (collection) {
+
+    some(collection.items, function (item) {
+
+      var toRemove = root.querySelector('[data-id="' + item.id + '"]');
+      if (toRemove) {
+
+        forEach(root.querySelectorAll('[data-model="' + toRemove.dataset.model + '"]'), function (node) {
+          previous.appendChild(node);
+        });
+
+        return true;
+      }
+      return false;
+
+    });
+
   }
+  else {
+    while (root.firstChild) {
+      previous.appendChild(root.firstChild);
+    }
+   }
 
   return previous;
 
 }
+
 
 
 function renderViewOnEvent (node, view, data) {
@@ -390,7 +417,7 @@ function renderViewOnEvent (node, view, data) {
 function updateCollection (node, data) {
 
 
-  var previous = getPrevious(node);
+  var previous = getPrevious(node, data.collection);
   renderCollection(node, data.collection);
   clean(previous);
 
@@ -400,27 +427,26 @@ function updateCollection (node, data) {
 function renderCollection (node, collection) {
 
   var view = loadView(node);
-  var fragment = document.createDocumentFragment();
 
   forEach(collection.items, function (item) {
     renderView({
-      root: fragment,
+      root: node,
       view: view,
       model: item
     })
   });
 
-  node.appendChild(fragment);
 }
 
 
+
 var renderView = compose(
-  render,
   renderHasMany,
+  render,
   bindController,
   getController,
-  observeSystem,
   observeModel,
+  runCustomRenderer,
   enforceModel,
   getView
 );
@@ -432,3 +458,8 @@ exports.clean = compose(
   clean,
   getPrevious
 );
+
+
+//  add caching of system.on and model.on("update") listeners
+//  and then add them to the clean script...
+//  move all observers, cache and cleaning to own module
